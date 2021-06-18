@@ -1,0 +1,137 @@
+plot_cdf <- function(type_, x_cutoff_) {
+  
+  title_ <- paste0(
+    "X", type_, 
+    "X"
+  )
+  
+  if (type_ == "X") {
+    to_plot <- X
+    
+    fn_drug_ <- paste0(
+      "X
+    )
+  } 
+  
+  if (!is.na(x_cutoff_)) {
+    title_ <- paste0(title_, " (zoomed in)")
+  }
+  
+  # calculate cdf and markers
+  marker <- to_plot %>% 
+    # create cdf info  
+    arrange(dayssupply) %>% 
+    mutate(
+      dummy = 1,
+      cum_dummy = cumsum(dummy),
+      cdf_dummy = cum_dummy / sum(dummy)
+    ) 
+  
+  n_pat <- to_plot %>% nrow()
+
+  x_min <- min(0, min(marker$dayssupply, na.rm = TRUE))
+  x_max <- max(marker$dayssupply, na.rm = TRUE)
+  cdf_p10 <- (marker %>% filter(cdf_dummy >= .1) %>% head(1))$dayssupply
+  cdf_p25 <- (marker %>% filter(cdf_dummy >= .25) %>% head(1))$dayssupply
+  cdf_p50<- (marker %>% filter(cdf_dummy >= .50) %>% head(1))$dayssupply
+  cdf_p75 <- (marker %>% filter(cdf_dummy >= .75) %>% head(1))$dayssupply
+  cdf_p90 <- (marker %>% filter(cdf_dummy >= .9) %>% head(1))$dayssupply
+  
+  cdf <- to_plot %>% 
+    ggplot(
+      aes(dayssupply), alpha = 0.7
+    ) +
+    stat_ecdf(geom = "step", color = "#002060", size = 1) +
+    scale_x_continuous(
+      expand = c(0, 0),
+      # limits = c(0, 2500),
+      # breaks = c(seq(0, 2500, by=200)),
+      labels = scales::comma
+    ) +
+    scale_y_continuous(
+      expand = c(0, 0),
+      breaks = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1),
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    geom_segment(
+      aes(x = cdf_p10, xend = cdf_p10, y = 0, yend = 0.1),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = x_min, xend = cdf_p10, y = 0.1, yend = 0.1),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = cdf_p25, xend = cdf_p25, y = 0, yend = 0.25),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = x_min, xend = cdf_p25, y = 0.25, yend = 0.25),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = cdf_p50, xend = cdf_p50, y = 0, yend = 0.5),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = x_min, xend = cdf_p50, y = 0.5, yend = 0.5),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = cdf_p75, xend = cdf_p75, y = 0, yend = 0.75),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = x_min, xend = cdf_p75, y = 0.75, yend = 0.75),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = cdf_p90, xend = cdf_p90, y = 0, yend = 0.9),
+      linetype = "dashed", color = "gray50"
+    ) +
+    geom_segment(
+      aes(x = x_min, xend = cdf_p90, y = 0.9, yend = 0.9),
+      linetype = "dashed", color = "gray50"
+    ) +
+    annotate("text", x = cdf_p10, y = 0.02, label = scales::comma(cdf_p10, accuracy = 1)) +
+    annotate("text", x = cdf_p25, y = 0.02, label = scales::comma(cdf_p25, accuracy = 1)) +
+    annotate("text", x = cdf_p50, y = 0.02, label = scales::comma(cdf_p50, accuracy = 1)) +
+    annotate("text", x = cdf_p75, y = 0.02, label = scales::comma(cdf_p75, accuracy = 1)) +
+    annotate("text", x = cdf_p90, y = 0.02, label = scales::comma(cdf_p90, accuracy = 1)) +
+    coord_cartesian(
+      xlim=c(x_min, x_cutoff_)
+    ) +
+    theme_cr(
+      legend.position = "none",
+      axis.ticks = element_blank()
+    ) +
+    labs_cr(
+      x = "Days supply",
+      y = "",
+      wrap_len = 13,
+      title = title_,
+      subtitle = "Title\n2003 – 2018",
+      source_txt = "Source: ",
+      note_txt = paste0(
+        "Note: ",
+        "X". "
+      ), 
+      note_sep = 5
+    )
+  
+  cdf
+  
+}
+
+cdf <- plot_cdf("X", "X")
+
+ggsave_cr(
+  list(
+    X,
+    X
+  ),
+  header$export("X"),
+  include_header = TRUE,
+  header_text = "PRELIMINARY AND UNCHECKED",
+  paginate = TRUE
+)
