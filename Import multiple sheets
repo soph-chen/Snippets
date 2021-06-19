@@ -1,0 +1,63 @@
+# OPTION #1 (see option 2 below as well)
+
+# FN 01. Read Tab -------------------------------------------------------
+# Function to read tab, and append the sheet
+# x = file name without the full path
+# y = sheet name
+
+read_tab <- function(x, y) {
+  
+  # filename <- gsub(".xlsx", "", x, ignore.case = TRUE)
+  
+  read_xlsx(header$import(paste(folder, x, sep = "/")), sheet = y) %>% 
+    mutate(file = x, sheet = y, line = row_number()) %>% 
+    set_names(gsub("[-()#/ .]+", "_", tolower(names(.)), perl = TRUE)) %>% 
+    mutate_at(vars(fund_code), as.character) 
+}
+
+# FN 02. Read Sheet -------------------------------------------------------
+# Function to read the .xlsx with all of the tabs
+# x = file name without the full path
+
+read_sheet <- function(x) {
+  tabs <- getSheetNames(header$import(paste(folder, x, sep = "/")))
+  
+  map2_dfr(x, tabs, read_tab)
+}
+
+# 01. Import Participant Transaction Files -------------------------------------------
+
+### Transactions
+
+folder <- '01_x/x.pdf'
+transaction_files <- list.files(header$import(paste(folder, sep = "/"))) %>% 
+  .[!grepl("~",.)] 
+  
+  
+  OR OPTION #2
+  
+  # Code ------------------------------------------------------------------
+
+import_file <- function(sheetname) {
+  file <- read_excel(
+    header$import("filepath"),
+    sheet = sheetname
+  ) %>% 
+    set_names(gsub("[ ]", "_", tolower(names(.)), perl = TRUE))
+
+}
+
+write_rds(import_file("tab name"), header$datasets("filepath"))
+write_rds(import_file("tab name"), header$datasets("filepath"))
+write_rds(import_file("tab name"), header$datasets("filepath"))
+write_rds(import_file("tab name"), header$datasets("filepath"))
+write_rds(import_file("tab name"), header$datasets("filepath"))
+
+stacked <- bind_rows(
+  import_file("tab name")
+  import_file("tab name")
+  import_file("tab name")
+  import_file("tab name")
+  import_file("tab name")
+)
+write_rds(stacked, header$datasets("filepath"))
