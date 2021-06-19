@@ -1,0 +1,127 @@
+# clear working directory
+rm(list = ls())
+
+# pull in useful packages
+library(readr)    # Reading in plain text files (like CSVs)
+library(dplyr)    # Working with data frames
+library(broom)    # Working with model objects
+library(modelr)   # Working with model objects
+library(lmtest)   # Performing tests on linear models
+library(car)      # Levene's Test, Linear Hypothesis Testing
+library(openxlsx) # Write Excel output
+library(purrr)    # Map functions
+
+# import previously prepared market, industry, and returns data
+df <- read_csv("X") 
+
+# View and clean our data -----------------------------------------------------------------------------
+
+# look at the data
+head(df)        # Look at the first several observations, with data types.
+glimpse(df)     # Look at a "transposed" version of head, with data types.
+View(df)        # Open an RStudio Data Viewer Window, filterable and sortable.
+summary(df)     # Get a summary of the numeric fields.
+
+# sort data by time
+df <- df %>% 
+  mutate(date = as.Date(date, format = '%m/%d/%Y')) %>% # the `%>%` (pipe) takes the left and puts it into the right
+  arrange(date)                   # sort by the `date` field, ascending
+
+# generate control periods (pre- and post-) and the class period
+df <- df %>%
+  mutate(
+    ## Create a pre-period control dummy
+    control_pre = date >= as.Date('2007-02-27') & date < as.Date('2008-02-27'), 
+    ## Create of post-period control dummy
+    control_post = date > as.Date('2009-01-19'),
+    ## Create an in-class control period [drop the complaint days]
+    class_dum = date >= as.Date('2008-02-27') & date <= as.Date('2009-01-19'),
+    class_dum_control = class_dum & dummies == 0)
+
+# Run a simple regression ------------------------------------------------------------------------------------
+
+# define the model and run a simple linear regression
+model_fn <- ret_rf ~ ret_mkt            # create a linear model of ret_rf = a + b * ret_mkt
+
+model <- lm(formula = model_fn,
+            data = df, 
+            subset = (df$control_pre)) # subset the data to the selected control period
+
+# look at model results and output
+model                                   # outputs the formula and coefficients
+summary(model)                          # outputs detailed information of the model
+glance(model)                           # from the `broom` package
+tidy(model)                             # from the `broom` package
+
+# Predict returns for the class period ----------------------------------------------------------------------
+
+## get the residual sum of squares for the model
+model.se <- glance(model)$sigma 
+## generate predicted values
+results <- augment(model, newdata = df) %>%   # attach predictions, standard error of prediction, from `broom`
+  add_residuals(model, var = "res") %>%                # attach residuals, from the `modelr` package
+  mutate(stdf = sqrt(model.se ^ 2 + .se.fit ^ 2),      # standard error of the forecast
+         sig = abs(res) > 1.96 * stdf,                 # flag residuals that are significantly different from zero
+         thresh_l = -1.96 * stdf,                      # (residual) confidence interval lower bound
+         thresh_u = 1.96  * stdf)                      # (residual) confidence interval upper bound
+
+# Perform some post-estimation tests -------------------------------------------------------------------------
+
+# perform a durbin-watson test for auto-correlation or errors
+## H0: There is no auto-correlation in error terms
+dw <- dwtest(model,                   
+             alternative = 'two.sided')                     
+dw$statistic
+dw$p.value
+dw_results <- data_frame(
+  model = "Dummy Control",
+  DW = dw$statistic,
+  DW_pval = dw$p.value
+)
+
+# Levene Test for Variance
+# H0: There is no structural break in error terms
+levene <- results %>%
+  filter(class_dum_control | control_pre) %>%                         # apply filter
+  with(leveneTest(res, as.factor(class_dum_control), center = mean))  # `with` tells `leveneTest` what dataset to use.
+# In this case, the piped in data.
+levene_results <- cbind("class_dum_control", "control_pre", levene[1,]) %>%
+  set_names(c("period_1", "period_2", "df", "f_value", "pval"))
+
+# Chow test - test for the structural break in the coefficients
+# HO: There is no structural break
+model_df <- df %>%
+  filter(class_dum_control | control_pre) %>%              # apply filter
+  mutate(class_dum = as.numeric(class_dum),                # make it 1/0 instead of TRUE/FALSE
+         class_mkt = class_dum * ret_mkt)                  # create dummy for interaction term
+
+lht_model <- lm(ret_rf ~ class_dum + ret_mkt + class_mkt, data = model_df)
+tidy(lht_model)
+chow <- lht(lht_model, c("class_dum = 0", "class_mkt = 0"))
+
+chow_results <- cbind("class_dum_control", "control_pre", chow[2, c("Res.Df", "Df", "F", "Pr(>F)")]) %>%
+  set_names(c("period_1", "period_2", "res.df", "df", "f", "pval"))
+
+
+# Write out our results ---------------------------------------------------------------------------------------
+
+wb <- createWorkbook()
+addWorksheet(wb, "Model Summary")
+writeData(wb, "Model Summary", glance(model))
+
+addWorksheet(wb, "Model Coefficients")
+writeData(wb, "Model Coefficients", tidy(model))
+
+addWorksheet(wb, "Dummy Control Detail")
+writeData(wb, "Dummy Control Detail", results)
+
+addWorksheet(wb, "Durbin Watson")
+writeData(wb, "Durbin Watson", dw_results)
+
+addWorksheet(wb, "Levene Test")
+writeData(wb, "Levene Test", levene_results)
+
+addWorksheet(wb, "Chow")
+writeData(wb, "Chow", chow_results)
+
+saveWorkbook(wb, "//projects/im-house/training/export/reg_results_stat_tests.xlsx", overwrite = TRUE)
