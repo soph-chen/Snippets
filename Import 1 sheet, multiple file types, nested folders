@@ -1,0 +1,7 @@
+# Not nested
+files <- list.files(header$import(paste(folder, sep = "/")))
+
+# Nested
+admin_files <- list.files(header$import(paste(folder, sep = "/")),
+                          full.names = TRUE,
+                          recursive = TRUE)
