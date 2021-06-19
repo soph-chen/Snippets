@@ -1,0 +1,297 @@
+Code by Sophia Chen
+Presenting 4 coding excerpts below to demonstrate different skills. Variable and dataset names have been changed for privacy.
+  1. Example #1: SQL - querying and manipulation
+        - Purpose: Investigate the different geographical locations that duplicate insurance claims are present in.
+  2. Example #2: R - Complex regression and statistical modeling on product data
+        - Purpose: Find statistical relationship between cryptocurrency product performance
+          and parent company.
+        - Statistical test: Wrote functions for building a dynamic cumulative abnormal return rolling-window regression
+          where inputs and parameters can be adjusted for sensitivities. Built Fisher matrix function to present results.
+  3. Example #3: R - Product data and revenue analysis
+        - Purpose: Summarize top customers by sales for a country by product segment.
+  4. Example #4: R - Data visualization using ggplot2
+        - Purpose: Summarize individual commodity financial performance by creating a graph of multiple boxplots to compare
+          with one another using dropline metrics.
+
+# Example #1: SQL Querying and Manipulation -------------------------------
+
+  select a.insurer, a.claimkey, a.patientkey, a.dateoffill, 
+  a.nationaldrugcode, a.dayssupply, b.same_insurer
+  from insurance_pharmacy_claims as a
+  left join (select insurer, claimkey, patientkey, dateoffill, nationaldrugcode, dayssupply,
+             row_number() 
+             over (
+               partition by insurer, patientkey, dateoffill, nationaldrugcode, dayssupply
+               order by localities DESC, populated_zip DESC, claimkey)
+             as same_insurer
+             from insurance_pharmacy_claims) b
+  using(claimkey)
+  
+
+# Example #2: R Regression and Statistical Modeling on Product Data -----------------------
+  
+  # Fisher Matrix Functions
+  get_no_news <- function(df,day_int) {
+    if (day_int==1) {
+      return(df %>% filter(!news_dummy_fisher))
+    } else {
+      df<- df %>% 
+        mutate(next_to_car = lag(news_dummy_fisher, 1) | lead(news_dummy_fisher, 1) | news_dummy_fisher,
+               next_to_car = ifelse(is.na(next_to_car), FALSE, next_to_car)) %>%
+        filter(!next_to_car)
+      
+      if(day_int==2){
+        df<- df %>% mutate(seq_1 = row_number() %in% seq(1, nrow(df), 2),
+                           seq_2 = row_number() %in% seq(2, nrow(df), 2))
+      } 
+      
+      if(day_int==3) {
+        df <- df %>% mutate(seq_1 = row_number() %in% seq(1, nrow(df), 3),
+                            seq_2 = row_number() %in% seq(2, nrow(df), 3),
+                            seq_3 = row_number() %in% seq(3, nrow(df), 3))
+      }
+    }
+    return(df)
+  }
+  
+  create_cont_mat <- function(ctrl_df, test_df, sig_var) {
+    contingency <- matrix(nrow = 2, ncol = 2)
+    contingency[1,1] <- sum(test_df[, sig_var], na.rm = TRUE)
+    contingency[2,1] <- sum(!test_df[, sig_var], na.rm = TRUE)
+    contingency[1,2] <- sum(ctrl_df[,sig_var], na.rm = TRUE)
+    contingency[2,2] <- sum(!ctrl_df[,sig_var], na.rm = TRUE)
+    
+    return(contingency)
+  } 
+  
+  get_cont_mat <- function(ctrl_df, test_df, sig_var, day_int) {
+    if (day_int==1) {
+      return(list(create_cont_mat(ctrl_df, test_df, sig_var)))
+    } else {
+      cont_mat_list <- list()
+      for (i in 1:day_int) {
+        cont_mat_list[[i]] <- create_cont_mat(ctrl_df %>% filter(!!sym(str_c("seq_",i))), test_df, "sig")
+      }
+    }
+    
+    return(cont_mat_list)
+  } 
+  
+  run_fisher <- function(cont_mat, day_int) {
+    fisher_test <- list()
+    for (i in 1:day_int) {
+      fisher_test[[i]] <- fisher.test(cont_mat[[i]])
+    }
+    
+    return(fisher_test)
+  } 
+  
+  rollsum_calc <- function (x, k, fill, lead) {
+    if(k%%2 == 1) {
+      return(zoo::rollsum(x,k,fill=fill,align="center"))
+    } else {
+      if(lead ==TRUE) {
+        return(zoo::rollsum(x,k,fill=fill,align="left"))
+      }
+      if(lead == FALSE) {
+        return(zoo::rollsum(x,k,fill=fill,align="right"))
+      }
+    }
+  }
+  
+  # Cumulative abnormal return functions for 1-day, 2-day, and 3-day periods
+  calc_car <-function(df, day_int, lead=if_else(day_int%%2==0,TRUE,NA), disclo_days, disclo_days_fisher, t_min, t_max, t) {
+    
+    lead_days = case_when(day_int %%2 == 1 ~ (day_int - 1)/2,
+                          day_int %%2 == 0 & lead==TRUE ~ day_int/2,
+                          day_int %%2 == 0 & lead==FALSE ~ day_int/2-1)
+    lag_days = case_when(day_int %%2 == 1 ~ lead_days,
+                         day_int %%2 == 0 ~ day_int - 1 - lead_days)
+    
+    t_min = if_else(day_int==3 | (day_int==2 & is.na(lead)), as.Date(t_min) - 1, t_min)
+    t_max = if_else(day_int==3 | (day_int==2 & is.na(lead)), as.Date(t_max) - 1, t_max)
+    
+    df_car <- df %>% mutate(disclo_date = date %in% unique(disclo_days)) %>%
+      mutate(news_dummy = disclo_date)%>% 
+      filter(date >= (t_min - 7), date <= (t_max + 7))
+    
+    for (i in 1:(nrow(df_car)-1)){
+      if (day_int == 2){
+        if (df_car$disclo_date[i]){
+          df_car$news_dummy[i+1] <- T
+        }
+      } else if (day_int == 3){
+        if (df_car$disclo_date[i]){
+          if (i == 1){
+            df_car$news_dummy[i+1] <- T
+          } else{
+            df_car$news_dummy[i-1] <- T
+            df_car$news_dummy[i+1] <- T
+          }
+          
+        }
+      }
+    }
+    
+    df_car <- df_car %>% mutate(disclo_date = date %in% unique(disclo_days_fisher)) %>%
+      mutate(news_dummy_fisher = disclo_date)%>% 
+      filter(date >= (t_min - 7), date <= (t_max + 7))
+    
+    for (i in 1:(nrow(df_car)-1)){
+      if (day_int == 2){
+        if (df_car$disclo_date[i]){
+          df_car$news_dummy_fisher[i+1] <- T
+        }
+      } else if (day_int == 3){
+        if (df_car$disclo_date[i]){
+          if (i == 1){
+            df_car$news_dummy_fisher[i+1] <- T
+          } else{
+            df_car$news_dummy_fisher[i-1] <- T
+            df_car$news_dummy_fisher[i+1] <- T
+          }
+          
+        }
+      }
+    }
+    
+    df_full <- df %>%  mutate(disclo_date = date %in% unique(disclo_days)) %>%
+      mutate(news_dummy = disclo_date)
+    
+    for (i in 1:(nrow(df_full)-1)){
+      if (day_int == 2){
+        if (df_full$disclo_date[i]){
+          df_full$news_dummy[i+1] <- T
+        }
+      } else if (day_int == 3){
+        if (df_full$disclo_date[i]){
+          if (i == 1){
+            df_full$news_dummy[i+1] <- T
+          } else{
+            df_full$news_dummy[i-1] <- T
+            df_full$news_dummy[i+1] <- T
+          }
+          
+        }
+      }
+    }
+    
+    df_full <- df_full %>%  mutate(disclo_date = date %in% unique(disclo_days_fisher)) %>%
+      mutate(news_dummy_fisher = disclo_date)
+    
+    for (i in 1:(nrow(df_full)-1)){
+      if (day_int == 2){
+        if (df_full$disclo_date[i]){
+          df_full$news_dummy_fisher[i+1] <- T
+        }
+      } else if (day_int == 3){
+        if (df_full$disclo_date[i]){
+          if (i == 1){
+            df_full$news_dummy_fisher[i+1] <- T
+          } else{
+            df_full$news_dummy_fisher[i-1] <- T
+            df_full$news_dummy_fisher[i+1] <- T
+          }
+          
+        }
+      }
+    }
+    
+    df_car <- df_car %>%
+      filter(date >= t_min, date <= t_max )
+  
+  # Rolling Window Helper Function
+  gen_windows <- function(t, control) {
+    t_min <- as.Date(t - control, origin = "1950-01-01")
+    t_max <- as.Date(t, origin = "1950-01-01") - 1
+    return(list(t_min, t_max))
+  }
+
+# R - Product Data and Revenue Analysis -----------------------------------
+
+  top_customers_by_segment <- revenues %>% 
+    filter(customer_country == "USA") %>% 
+    filter(!year %in% c("2000", "2020")) %>% 
+    group_by(year, segment, application) %>%
+    summarize(
+      product_a_rev = sum(product_a_rev, na.rm = T),
+      product_b_rev = sum(product_b_rev, na.rm = T),
+      product_c_rev = sum(product_c_rev, na.rm = T)
+    ) %>% 
+    ungroup() %>% 
+    group_by(year) %>%
+    mutate(
+      perc_product_a = product_a / sum(product_a, na.rm = T),
+      perc_product_b = product_b / sum(product_b, na.rm = T),
+      perc_product_c = product_c / sum(product_c, na.rm = T)
+    ) %>% 
+    ungroup() %>% 
+    arrange(year, desc(product_a), desc(product_b), 
+            desc(product_c), segment) 
+
+
+# R - Data visualization using ggplot2 ------------------------------------
+
+  # Build underlying dataset for boxplots
+  data_for_boxplots <- commodity_build %>% 
+    group_by(commodity, commodity_code) %>% 
+    summarise(
+      p5 = quantile(rev_to_variable_cost, 0.05),
+      p25 = quantile(rev_to_variable_cost, 0.25),
+      p50 = quantile(rev_to_variable_cost, 0.50),
+      p75 = quantile(rev_to_variable_cost, 0.75),
+      p95 = quantile(rev_to_variable_cost, 0.95)
+    ) %>% 
+    ungroup() %>% 
+    left_join(size_designations) %>% 
+    mutate(size = factor(size, levels = c("Small", "Medium", "Large")
+    ))) %>%
+    arrange(size, ordering_pct, desc(commodity)) 
+
+  # Build variables for boxplot droplines
+  all_commodities_stats <- commodity_build %>% 
+    summarise(
+      mean = mean(rev_to_variable_cost),
+      p25 = quantile(rev_to_variable_cost, 0.25),
+      p50 = quantile(rev_to_variable_cost, 0.50),
+      p75 = quantile(rev_to_variable_cost, 0.75),
+    )
+  
+  p25_all_commodities <- all_commodities_stats %>% select(p25) %>% pull()
+  p50_all_commodities <- all_commodities_stats %>% select(p50) %>% pull()
+  p75_all_commodities <- all_commodities_stats %>% select(p75) %>% pull()
+  mean_all_commodities <- all_commodities_stats %>% select(mean) %>% pull()
+  
+  # Build boxplots
+  boxplots <- ggplot(data_for_boxplots, aes(y = commodity,
+                                color = factor(size, levels = c(
+                                  "Small", "Medium", "Large"))
+  )) +
+    scale_colour_manual(
+      values = c("Small"="#046307", "Medium"="#eaa221", "Large"="#9e1a1a"
+      )
+    ) +
+    geom_errorbar(aes(xmin = p5, xmax = p95), width = 0.4) +
+    geom_boxplot(aes(xmin = p5, xlower = p25, xmiddle = p50, xupper = p75, xmax = p95), stat = 'identity',
+                 width = 0.5) +
+    geom_point(aes(x = mean)) +
+    scale_x_continuous(labels=scales::percent) +
+    geom_segment(aes(y = 0, yend = 28, x=p25_all_commodities, xend=p25_all_commodities), 
+                 color = "black", size = 0.3) +
+    geom_segment(aes(y = 0, yend = 28, x=p75_all_commodities, xend=p75_all_commodities), color = "black", size = 0.3) +
+    geom_segment(aes(y = 0, yend = 28, x=p50_all_commodities, xend=p50_all_commodities), color = "black", size = 0.3) +
+    geom_segment(aes(y = 0, yend = 29, x=1.8, xend=1.8), color = "black", linetype = "dotted", size = 0.5) +
+    annotate("text", x = p25_all_commodities, y = 30, label = "All\nCommodities\n25th\nPercentile", vjust = 1, size = 1.5) +
+    annotate("text", x = p75_all_commodities, y = 30, label = "All\nCommodities\n75th\nPercentile", vjust = 1, size = 1.5) +
+    annotate("text", x = p50_all_commodities, y = 30, label = "All\nCommodities\n50th\nPercentile", vjust = 1, size = 1.5) +
+    theme(
+      text = element_text(size=6),
+      legend.position = c(0.8, 0.5)) + 
+    labs(title = c("Revenue to Variable Cost Distributions for All Commodities"),
+            x = "R/VC",
+            y = "Commodity")
+  
+  # Export boxplots
+  ggsave(boxplots, "All Commodities Boxplots.pdf")
+  
+  
