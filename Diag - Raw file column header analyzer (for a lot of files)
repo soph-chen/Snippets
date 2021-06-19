@@ -1,0 +1,86 @@
+## Quick and dirty version
+
+pull_variables_csv <- function(filename){
+  df <- read_csv(header$import(paste(folder, filename, sep = "/")),
+                 n_max = 1) %>% 
+    colnames() %>% as.data.frame() %>% mutate(file = filename)
+  
+  colnames(df) <- c("variable", "file")
+  df
+}
+
+diag <- map_dfr(files, pull_variables_csv) %>% 
+  mutate(val = 1) %>% spread(variable, val)
+ 
+## LONG version 
+  
+# 00. Functions and Useful -----------------------------------------------------------
+
+find_files <- function(folder) {
+  list.files(header$import(folder))
+}
+
+pull_variables_xlsx <- function(filename, skip = 0){
+  df <- read_xlsx(header$import(paste0(folder, filename)), 
+                  skip = skip, 
+                  n_max = 1) %>% 
+    colnames() %>% as.data.frame() %>% mutate(file = filename)
+  
+  colnames(df) <- c("variable", "file")
+  df
+}
+
+pull_variables_csv <- function(filename){
+  df <- read_csv(header$import(paste0(folder, filename)), n_max = 1) %>% 
+    colnames() %>% as.data.frame() %>% mutate(file = filename)
+  
+  colnames(df) <- c("variable", "file")
+  df
+}
+
+pull_variables_sheet <- function(filename, sheetname){
+  df <- read_xlsx(header$import(paste0(folder, filename)), 
+                  sheet = sheetname,
+                  n_max = 1) %>% 
+    colnames() %>% as.data.frame() %>% mutate(file = filename, sheet = sheetname)
+  
+  colnames(df) <- c("variable", "file", "sheetname")
+  df
+}
+
+pull_tabs <- function(filename) {
+  df <- getSheetNames(header$import(paste0(folder, filename))) %>% 
+    as.data.frame() %>% 
+    mutate(file = filename)
+  
+  colnames(df) <- c("sheet", "file")
+  df
+  
+}
+
+# spreading <- df %>% mutate(val = 1) %>% spread(variable, val)
+
+# 01. Pru -----------------------------------------------------------
+
+folder <- '02_x'
+pru_files <- find_files(folder)
+
+pru_files_t1 <- pru_files[1]
+pru_files_t2 <- pru_files[2:8]
+
+pru_diag_t1 <- pull_variables_xlsx(pru_files_t1, 4)
+pru_diag_t2 <- map_dfr(pru_files_t2, pull_variables_xlsx)
+
+pru_diag <- bind_rows(pru_diag_t1, pru_diag_t2) %>% 
+  filter(variable != '...18') %>% 
+  mutate(val = 1) %>% spread(variable, val)
+
+pru_sheets <- map_dfr(pru_files, pull_tabs)
+
+write_excel_csv(pru_diag, header$export(paste0('diag/', '00_pru=_vars.csv')), na="")
+write_excel_csv(pru_sheets %>% group_by(file) %>% 
+                  mutate(sheets = n()), header$export(paste0('diag/', '00_pru=_sheets_long.csv')), na="")
+write_excel_csv(pru_sheets %>% mutate(val = 1) %>% spread(sheet, val),
+                header$export(paste0('diag/', '00_pru=l_sheets_wide.csv')), na="")
+
+
