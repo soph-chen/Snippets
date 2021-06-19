@@ -1,0 +1,7 @@
+model <- lm(y ~ x, data = overall_summary)
+model_df <- tidy(model)
+intercept <- round(model_df$estimate[1], 3)
+beta <- round(model_df$estimate[2], 4)
+p_val <- round(model_df$p.value[2], 4)
+sig <- if_else(p_val < 0.05, "significant", "insignificant")
+star <- if_else(p_val < 0.05, "*", "")
