@@ -1,0 +1,16 @@
+plot <- ggplot(percentage_ca_natl, mapping = aes(x = year, y = percentage)) +
+  geom_col(aes(fill = group), position = position_dodge2(preserve = "single"), width = 2) +
+  geom_text(aes(label = scales::percent(percentage, accuracy=0.1), group = group), 
+            position = position_dodge(width = 2), vjust = -0.25) +
+  scale_fill_manual(values = c("#a6a6a6", "#002060")) +
+  theme_cr(legend.position = c(.51, 1), legend.direction = "horizontal", legend.spacing.x = unit(1, 'mm'), axis.ticks = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(accuracy=0.5), breaks = c(0, .005, .01, .015, .02, .025, .03, .035), limits =  c(0, .035), expand = c(0,0)) +
+  scale_x_continuous(breaks = c(1999, 2001, 2003, 2005, 2007, 2009, 2011, 2013, 2015, 2017)) +
+  labs_cr(title = c("Percentage of high school students who have used heroin"),
+          subtitle = "1999 -- 2017",
+          x = "",
+          y = "Percentage of\nXs",
+          source_txt = "Source:  X",
+          note_txt = "Note: ",
+          wrap_len=13,
+          note_sep=2)
