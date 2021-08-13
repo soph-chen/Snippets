@@ -1,0 +1,4 @@
+Downloading to CSV:
+df.to_csv('example.csv')
+
+# This file was saved to ~/notebooks/example.csv - in the Bento file tree, you can select it to download it
