@@ -2,3 +2,7 @@ Downloading to CSV:
 df.to_csv('example.csv')
 
 # This file was saved to ~/notebooks/example.csv - in the Bento file tree, you can select it to download it
+
+For iterating over a number:
+xrange(i-1, 0, -1):
+xrange(beginning, end-1, increment) --> so can do neg too!
